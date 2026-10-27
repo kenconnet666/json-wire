@@ -11,6 +11,7 @@ export {
   fromWire,
   jsonAt,
   parseWireJson,
+  parseWireJsonObject,
   stringifyWire,
   toWire,
   TYPES,

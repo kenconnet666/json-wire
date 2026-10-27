@@ -285,4 +285,15 @@ class WireTest {
         assertTrue(item.getMessage().contains("item 1: \"2.5\" is not a Long"), item.getMessage());
         assertThrows(UnsupportedOperationException.class, () -> Wire.convertList(List.of(1), Long.class).add(2L));
     }
+
+    @Test
+    void fromJsonObject要求根是对象_null是空Map() {
+        Map<String, Object> order = Wire.fromJsonObject(Wire.toJson(Map.of("id", 9007199254740993L)));
+        assertEquals(Map.of("id", 9007199254740993L), order);
+        assertEquals(Map.of(), Wire.fromJsonObject(null));
+        var notObject = assertThrows(IllegalArgumentException.class, () -> Wire.fromJsonObject("[1]"));
+        assertTrue(notObject.getMessage().contains("at position 0"), notObject.getMessage());
+        var wrapped = assertThrows(IllegalArgumentException.class, () -> Wire.fromJsonObject(Wire.toJson(List.of(1L))));
+        assertTrue(wrapped.getMessage().startsWith("Wire.fromJsonObject: "), wrapped.getMessage());
+    }
 }

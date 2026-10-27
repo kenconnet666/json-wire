@@ -95,6 +95,26 @@ export function parseWireJson<T = unknown>(text: string | null | undefined, opti
 }
 
 /**
+ * 读根是对象的 typed JSON 文字，text 为 null 或 undefined 时是空对象。根不是对象（数组、单个值，或包成 `$value` 的）时报错。
+ * 与 Java 的 `Wire.fromJsonObject` 对等；`JSON.parse` 不给位置，所以报错里说的是根的类型。
+ */
+export function parseWireJsonObject<T extends Record<string, unknown> = Record<string, unknown>>(
+  text: string | null | undefined,
+  options: FromWireOptions = {},
+): T {
+  if (text === null || text === undefined) return {} as T;
+  const value = parseWireJson(text, options);
+  if (!isRecord(value)) throw new TypeError(`parseWireJsonObject: the root is ${describeRoot(value)}, not an object`);
+  return value as T;
+}
+
+/** 报错时说根是什么。 */
+function describeRoot(value: unknown): string {
+  if (value === null) return "null";
+  return Array.isArray(value) ? "an array" : `a ${typeof value}`;
+}
+
+/**
  * 按点路径取树里的值：`"buyer.name"` 沿嵌套的对象往下取，数组上的数字段按下标取（`"rows.0.price"`）。
  * 路径上不是对象、没有这个属性（只认自身的属性）、下标越界时为 undefined；空路径是树本身。与 Java 的 `Json.at` 对等，Java 那边取不到时是 null。
  */

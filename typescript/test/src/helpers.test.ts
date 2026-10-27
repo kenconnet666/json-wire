@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { CalendarDate } from "@internationalized/date";
-import { jsonAt, parseWire, parseWireJson, stringifyWire, wireText } from "@zerodep-dev/json-wire";
+import { jsonAt, parseWire, parseWireJson, parseWireJsonObject, stringifyWire, wireText } from "@zerodep-dev/json-wire";
 import { Decimal } from "decimal.js";
 
 const SAMPLE = fileURLToPath(new URL("../../../spec/order.json", import.meta.url));
@@ -25,6 +25,21 @@ describe("typed JSON 文字的往返", () => {
     const order = parseWireJson<Record<string, unknown>>(readFileSync(SAMPLE, "utf8"), { reader: (kind, text) => `${kind}:${text}` })!;
     assert.equal(order.id, "bigint:9007199254740993");
     assert.equal(order.code, "PO-1");
+  });
+});
+
+describe("parseWireJsonObject：根要是对象", () => {
+  it("读出对象，null 与 undefined 是空对象", () => {
+    assert.deepEqual(parseWireJsonObject(stringifyWire({ id: 9007199254740993n })), { id: 9007199254740993n });
+    assert.deepEqual(parseWireJsonObject(null), {});
+    assert.deepEqual(parseWireJsonObject(undefined), {});
+  });
+
+  it("根是数组、单个值或包成 $value 时报错", () => {
+    assert.throws(() => parseWireJsonObject("[1]"), /the root is an array, not an object/);
+    assert.throws(() => parseWireJsonObject('"x"'), /the root is a string, not an object/);
+    assert.throws(() => parseWireJsonObject("null"), /the root is null, not an object/);
+    assert.throws(() => parseWireJsonObject(stringifyWire([1n])), /the root is an array/);
   });
 });
 

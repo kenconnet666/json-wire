@@ -38,6 +38,16 @@ public final class Json {
         return value;
     }
 
+    /** 读一段根是对象的 JSON 文字（JSON 列、配置）；根不是对象时报错并带上位置，text 为 null 时是空的 Map。读出来的 Map 不可修改。 */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> readObject(String text) {
+        if (text == null) return Map.of();
+        Json reader = new Json(text);
+        reader.space();
+        if (!reader.next('{')) throw reader.error("expected a JSON object");
+        return (Map<String, Object>) read(text);
+    }
+
     /**
      * 写成紧凑的 JSON 文字：Map（键取 toString）、Collection 与数组、String、Boolean、null，数字原样写（BigDecimal 不用科学计数法）。
      * 别的类型、NaN 与无穷大报 IllegalArgumentException；要写 bigint、日期这些先经 {@link Wire#encode} 变成文字。

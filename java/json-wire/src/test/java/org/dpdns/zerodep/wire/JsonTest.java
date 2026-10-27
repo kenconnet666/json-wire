@@ -100,4 +100,14 @@ class JsonTest {
         assertNull(Json.at(null, "a"));
         assertThrows(IllegalArgumentException.class, () -> Json.at(tree, null));
     }
+
+    @Test
+    void readObject要求根是对象_null是空Map() {
+        assertEquals(Map.of("a", 1L), Json.readObject(" {\"a\":1} "));
+        assertEquals(Map.of(), Json.readObject(null));
+        assertThrows(UnsupportedOperationException.class, () -> Json.readObject(null).put("a", 1));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Json.readObject("  [1]"));
+        assertEquals("Json.read: expected a JSON object at position 2", e.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> Json.readObject("{\"a\":}"));
+    }
 }

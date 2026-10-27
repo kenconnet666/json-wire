@@ -286,6 +286,17 @@ public final class Wire {
     /** 读 typed JSON 文字：{@code Wire.decode(Json.read(text))}，text 为 null 时是 null。与 TypeScript 的 {@code parseWireJson} 对等。 */
     public static Object fromJson(String text) { return text == null ? null : decode(Json.read(text)); }
 
+    /**
+     * 读根是对象的 typed JSON 文字（{@link Json#readObject} 再 {@link #decode}）；text 为 null 时是空的 Map。
+     * 根不是对象时报错并带上位置；写的时候根是列表或单个值（包成 {@code $value}）的也报错。与 TypeScript 的 {@code parseWireJsonObject} 对等。
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> fromJsonObject(String text) {
+        Object value = decode(Json.readObject(text));
+        if (value instanceof Map<?, ?>) return (Map<String, Object>) value;
+        throw new IllegalArgumentException("Wire.fromJsonObject: the JSON object wraps a " + VALUE + " that is not an object");
+    }
+
     /** 沿树往下，路径在 types 里的文字换成值；数组不占一段。 */
     private static Object revive(Object value, String path, Map<String, WireType> types, WireReader reader) {
         if (value instanceof String text) {

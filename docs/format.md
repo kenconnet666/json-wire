@@ -44,12 +44,13 @@ TypeScript 的日期类来自 `@internationalized/date`。还原时 Java 默认�
 | 编码 | `Wire.encode(value)` → Map、List、String、Number、Boolean 组成的树，任何 JSON 库都能原样写出 | `toWire(value)` → JSON 值 |
 | 还原 | `Wire.decode(tree)`、`Wire.decode(tree, reader)`：不改传入的树，返回不可修改的新树 | `fromWire(json, { timeZone, reader })`：就地改写，通常它刚由 `JSON.parse` 得到 |
 | typed JSON 文字 | `Wire.toJson(value)`、`Wire.fromJson(text)`（null 读成 null） | `stringifyWire(value)`、`parseWireJson(text, options)`（null、undefined 读成 null） |
+| 根是对象的 typed JSON 文字 | `Wire.fromJsonObject(text)` → `Map<String, Object>`，null 读成空 Map，根不是对象时报错 | `parseWireJsonObject(text, options)`，null、undefined 读成 `{}`，根不是对象时报错 |
 | 单个值的文字 | `Wire.text(value)`、`Wire.parse(Class, text)`、`Wire.read(kind, text)` | `wireText(value)`、`parseWire(kind 或类, text)` |
 | 转成要的类型 | `Wire.convert(value, Class)`、`Wire.convertList(value, Class)` | `parseWire(kind, wireText(value))`（见下文） |
 | 按点路径取值 | `Json.at(tree, "rows.0.price")`，取不到是 null | `jsonAt(tree, "rows.0.price")`，取不到是 undefined |
 | 值的种类 | `Wire.typeOf(value)` | `wireTypeOf(value)` |
 | 接入方的值类型 | `Wire.register(new WireCodec<>(…))` | `registerWireCodec({ … })` |
-| JSON 文字 | `Json.read(text)`、`Json.write(tree)`：零依赖的读写，数字不经 double | 用 `JSON.parse`、`JSON.stringify` |
+| JSON 文字 | `Json.read(text)`、`Json.write(tree)`：零依赖的读写，数字不经 double；`Json.readObject(text)` 要求根是对象（报错带位置） | 用 `JSON.parse`、`JSON.stringify` |
 
 Java 一侧绑定到有类型的对象时不需要 `decode`：Spring 的 Jackson 本来就把 `"12.50"`、ISO 日期读成 BigDecimal、LocalDate，Spring Boot 默认忽略不认识的 `$types`。没有类型可依的树（表单的值、`Map<String, Object>`）才用 `Wire.decode`。
 
