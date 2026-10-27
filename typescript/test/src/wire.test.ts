@@ -86,9 +86,10 @@ describe("wire：线上的 typed JSON", () => {
     assert.deepEqual(toWire({ x: custom }), { x: { when: "2024-01-01" }, $types: { "x.when": "date" } });
   });
 
-  it("fromWire 读不出的文字报错并指出路径", () => {
+  it("fromWire 读不出的文字报错并指出路径；不认识的种类报错", () => {
     assert.throws(() => fromWire({ a: "x", $types: { a: "decimal" } }), /fromWire: a: "x" is not a decimal number/);
     assert.throws(() => fromWire({ a: "2024-02-30", $types: { a: "date" } }), /not a calendar date/);
+    assert.throws(() => fromWire({ a: "1", $types: { a: "money" } }), /fromWire: unknown type money/);
   });
 
   it("wireText 与 parseWire：地址栏里的单个值", () => {

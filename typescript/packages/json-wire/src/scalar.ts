@@ -20,6 +20,13 @@ import { Decimal } from "decimal.js";
  */
 export type WireType = "bigint" | "decimal" | "double" | "date" | "time" | "timestamp" | "timestamptz" | "bytes";
 
+const WIRE_TYPES: ReadonlySet<unknown> = new Set<WireType>(["bigint", "decimal", "double", "date", "time", "timestamp", "timestamptz", "bytes"]);
+
+/** 是 {@link WireType} 里的一种（`$types` 来自对方，要先校验）。 */
+export function isWireType(name: unknown): name is WireType {
+  return WIRE_TYPES.has(name);
+}
+
 /** {@link parseWire} 能读的种类：要还原的种类，加上 JSON 原样承载的文字、整数和布尔（地址栏里它们也是文字）。 */
 export type WireKind = WireType | "text" | "integer" | "boolean";
 

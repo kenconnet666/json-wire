@@ -1,4 +1,4 @@
-import { parseWire, specialText, wireTypeOf, type WireOptions, type WireType } from "./scalar.js";
+import { isWireType, parseWire, specialText, wireTypeOf, type WireOptions, type WireType } from "./scalar.js";
 
 /** JSON 能承载的值。 */
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -49,6 +49,9 @@ export function fromWire<T = unknown>(json: unknown, options: WireOptions = {}):
   if (!isRecord(json) || !Object.hasOwn(json, TYPES)) return json as T;
   const types = json[TYPES];
   if (!isRecord(types)) throw new TypeError(`fromWire: ${TYPES} must be an object of path → type`);
+  for (const type of Object.values(types)) {
+    if (!isWireType(type)) throw new TypeError(`fromWire: unknown type ${String(type)}`);
+  }
   delete json[TYPES];
   for (const [path, type] of Object.entries(types)) {
     const steps = path.split(".").map(unescape);

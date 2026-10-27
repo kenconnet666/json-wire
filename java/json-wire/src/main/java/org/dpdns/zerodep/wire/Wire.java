@@ -1,5 +1,6 @@
 package org.dpdns.zerodep.wire;
 
+import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
@@ -18,15 +19,17 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
 
 /**
  * 线上的 typed JSON：Long、BigInteger、BigDecimal、java.time 的值、字节等 JSON 不能原样承载（或 JavaScript 读了会丢精度）的值
- * 写成文字，根对象上的 {@code $types} 记下它们的位置，对方据此还原（种类见 {@link WireType}）。与 SQL 无关，任何接口都可以用；
- * TypeScript 的 {@code @zerodep-dev/wire}、vue-tsx-pro 的请求层用同一套写法，{@code spec/wire} 是三边共用的样例。
+ * 写成文字，根对象上的 {@code $types} 记下它们的位置，对方据此还原（种类见 {@link WireType}）。任何接口的请求、响应、消息都可以用；
+ * TypeScript 的 {@code @zerodep-dev/json-wire} 是同一套写法，两边的测试对照仓库里同一份样例 {@code spec/order.json}。
  *
  * <pre>{@code
  * @GetMapping("/orders/{id}")
@@ -37,6 +40,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 读：绑定到有类型的对象时 Spring 的 Jackson 本来就把 {@code "12.50"}、ISO 日期读成 BigDecimal、LocalDate（忽略 {@code $types}）；
  * 没有类型可依的树（表单的值、{@code Map<String, Object>}）用 {@link #decode} 按 {@code $types} 还原；地址栏里的单个值用 {@link #parse}。
  * <p>扩展：接入方自己的值类型用 {@link #register} 注册怎么写、怎么读（{@link WireCodec}）；{@link #decode} 还原成什么可以换（{@link WireReader}）。
+ * 除注册表外没有可变的状态，各个方法都可以并发调用。
  */
 public final class Wire {
     /** 根对象上的类型表。 */
@@ -60,13 +64,22 @@ public final class Wire {
     /** 工具类，不能实例化。 */
     private Wire() { }
 
-    /** 注册接入方自己的值类型（应用启动时注册一次）：之后编码、{@link #text}、{@link #parse} 都按它写读。 */
-    public static void register(WireCodec<?> codec) { CODECS.add(0, codec); }
+    /**
+     * 注册接入方自己的值类型：之后 {@link #encode}、{@link #typeOf}、{@link #text}、{@link #parse} 都按它写读，也盖过内置的写法。
+     * 注册表是整个 JVM 共用的，约定在应用启动时、开始处理请求之前注册一次：注册本身线程安全，
+     * 但与之并发的编码看不看得到这次注册没有保证。同一个类型注册多次时后注册的算数；值是好几个注册类型的实例时也是后注册的优先。
+     */
+    public static void register(WireCodec<?> codec) { CODECS.add(0, Objects.requireNonNull(codec, "codec")); }
 
-    /** value 的类型注册过时是那个写法，否则为 null。 */
+    /** value 是某个注册类型的实例时是那个写法，否则为 null。 */
     private static WireCodec<?> codecOf(Object value) {
-        if (CODECS.isEmpty()) return null;
         for (WireCodec<?> codec : CODECS) if (codec.type().isInstance(value)) return codec;
+        return null;
+    }
+
+    /** 恰好为 type 注册的写法，否则为 null（读的时候要的是这个类型本身，不是它的父类）。 */
+    private static WireCodec<?> codecFor(Class<?> type) {
+        for (WireCodec<?> codec : CODECS) if (codec.type() == type) return codec;
         return null;
     }
 
@@ -163,41 +176,43 @@ public final class Wire {
      * 按 Java 类读线上的文字（地址栏参数、表头筛选的值），格式与 {@link #text} 写出的一致：整数不能有小数部分，
      * 日期要是真实存在的日历日期，日期时间也接受空格分隔，带时差的时刻要带 {@code Z} 或时差，枚举按名字。读不出时报错，消息里带上原文。
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     public static <T> T parse(Class<T> type, String text) {
         if (text == null) throw new IllegalArgumentException("Wire.parse: text is null");
-        Class<?> t = box(type);
+        Function<String, ?> reader = readerFor(box(type));
+        if (reader == null) throw new IllegalArgumentException("Wire.parse: cannot read text as " + type.getSimpleName());
         try {
-            Object value;
-            WireCodec<?> codec = CODECS.stream().filter(c -> c.type() == t).findFirst().orElse(null);
-            if (codec != null) value = codec.reader().apply(text);
-            else if (t == String.class) value = text;
-            else if (t == Integer.class) value = Integer.valueOf(text);
-            else if (t == Long.class) value = Long.valueOf(text);
-            else if (t == Short.class) value = Short.valueOf(text);
-            else if (t == Byte.class) value = Byte.valueOf(text);
-            else if (t == BigInteger.class) value = new BigInteger(text);
-            else if (t == BigDecimal.class) value = new BigDecimal(text);
-            else if (t == Double.class) value = Double.valueOf(text);
-            else if (t == Float.class) value = Float.valueOf(text);
-            else if (t == Boolean.class) value = bool(text);
-            else if (t == LocalDate.class) value = LocalDate.parse(text);
-            else if (t == LocalTime.class) value = LocalTime.parse(text);
-            else if (t == LocalDateTime.class) value = LocalDateTime.parse(text.replaceFirst(" ", "T"));
-            else if (t == OffsetDateTime.class) value = OffsetDateTime.parse(text);
-            else if (t == Instant.class) value = OffsetDateTime.parse(text).toInstant();
-            else if (t == ZonedDateTime.class) value = ZonedDateTime.parse(text);
-            else if (t == UUID.class) value = UUID.fromString(text);
-            else if (t == byte[].class) value = Base64.getDecoder().decode(text);
-            else if (t.isEnum()) value = Enum.valueOf((Class) t, text);
-            else throw new IllegalArgumentException("Wire.parse: cannot read text as " + type.getSimpleName());
-            return (T) value;
-        } catch (NumberFormatException | DateTimeParseException e) {
-            throw new IllegalArgumentException("\"" + text + "\" is not a " + type.getSimpleName(), e);
-        } catch (IllegalArgumentException e) {
-            if (e.getMessage() != null && e.getMessage().startsWith("Wire.parse")) throw e;
+            return (T) reader.apply(text);
+        } catch (IllegalArgumentException | DateTimeParseException e) {
             throw new IllegalArgumentException("\"" + text + "\" is not a " + type.getSimpleName(), e);
         }
+    }
+
+    /** 读 t 的方式；读不了这个类型时为 null。数字、Base64、枚举读不出时抛的都是 IllegalArgumentException。 */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Function<String, ?> readerFor(Class<?> t) {
+        WireCodec<?> codec = codecFor(t);
+        if (codec != null) return codec.reader();
+        if (t == String.class) return text -> text;
+        if (t == Integer.class) return Integer::valueOf;
+        if (t == Long.class) return Long::valueOf;
+        if (t == Short.class) return Short::valueOf;
+        if (t == Byte.class) return Byte::valueOf;
+        if (t == BigInteger.class) return BigInteger::new;
+        if (t == BigDecimal.class) return BigDecimal::new;
+        if (t == Double.class) return Double::valueOf;
+        if (t == Float.class) return Float::valueOf;
+        if (t == Boolean.class) return Wire::bool;
+        if (t == LocalDate.class) return LocalDate::parse;
+        if (t == LocalTime.class) return LocalTime::parse;
+        if (t == LocalDateTime.class) return text -> LocalDateTime.parse(text.replaceFirst(" ", "T"));
+        if (t == OffsetDateTime.class) return OffsetDateTime::parse;
+        if (t == Instant.class) return text -> OffsetDateTime.parse(text).toInstant();
+        if (t == ZonedDateTime.class) return ZonedDateTime::parse;
+        if (t == UUID.class) return UUID::fromString;
+        if (t == byte[].class) return Base64.getDecoder()::decode;
+        if (t.isEnum()) return text -> Enum.valueOf((Class) t, text);
+        return null;
     }
 
     /**
@@ -344,7 +359,7 @@ public final class Wire {
                 }
                 if (value.getClass().isArray()) {
                     List<Object> out = new ArrayList<>();
-                    for (int i = 0; i < java.lang.reflect.Array.getLength(value); i++) out.add(write(java.lang.reflect.Array.get(value, i), path));
+                    for (int i = 0; i < Array.getLength(value); i++) out.add(write(Array.get(value, i), path));
                     return out;
                 }
                 Map<String, Object> out = new LinkedHashMap<>();

@@ -10,9 +10,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 读写 JSON 文字（RFC 8259），不依赖哪一个 JSON 库。读成 Map、List、String、数字、Boolean 和 null：给地址栏里带 JSON 的参数用
- * （表格请求的 {@code condition}），请求体照常交给 Web 框架的 JSON 库；写是读的反向，给存进库里的 JSON 列用（流程引擎的变量、状态）。对象是保持键顺序的 Map，数字是整数且放得进 long 时为 Long，
- * 其余为 BigDecimal（不经 double，不丢精度）。读出来的 Map、List 不可修改。
+ * 读写 JSON 文字（RFC 8259），不依赖哪一个 JSON 库。给不经 Web 框架的 JSON 用：地址栏里带 JSON 的参数、存进库里的 JSON 列、
+ * 配置与定义文件；请求体照常交给框架的 JSON 库。读成 Map、List、String、数字、Boolean 和 null：对象是保持键顺序的 Map，
+ * 数字是整数且放得进 long 时为 Long，其余为 BigDecimal（不经 double，不丢精度）。读出来的 Map、List 不可修改。
  * <pre>{@code
  * Object tree = Json.read("{\"any\":[{\"field\":\"amount\",\"op\":\"gte\",\"value\":10000}]}");
  * String text = Json.write(tree);   // 紧凑的写法，键按 Map 的顺序
@@ -131,16 +131,16 @@ public final class Json {
         at++;
         Map<String, Object> out = new LinkedHashMap<>();
         space();
-        if (peek('}')) return Collections.unmodifiableMap(out);
+        if (skip('}')) return Collections.unmodifiableMap(out);
         while (true) {
             space();
-            if (!peekChar('"')) throw error("expected a property name");
+            if (!next('"')) throw error("expected a property name");
             String key = string();
             space();
             expect(':');
             out.put(key, value(depth));
             space();
-            if (peek('}')) return Collections.unmodifiableMap(out);
+            if (skip('}')) return Collections.unmodifiableMap(out);
             expect(',');
         }
     }
@@ -150,11 +150,11 @@ public final class Json {
         at++;
         List<Object> out = new ArrayList<>();
         space();
-        if (peek(']')) return Collections.unmodifiableList(out);
+        if (skip(']')) return Collections.unmodifiableList(out);
         while (true) {
             out.add(value(depth));
             space();
-            if (peek(']')) return Collections.unmodifiableList(out);
+            if (skip(']')) return Collections.unmodifiableList(out);
             expect(',');
         }
     }
@@ -180,34 +180,39 @@ public final class Json {
                 case 'n' -> out.append('\n');
                 case 'r' -> out.append('\r');
                 case 't' -> out.append('\t');
-                case 'u' -> {
-                    if (at + 4 > text.length()) throw error("short \\u escape");
-                    try {
-                        out.append((char) Integer.parseInt(text.substring(at, at + 4), 16));
-                    } catch (NumberFormatException ex) {
-                        throw error("bad \\u escape");
-                    }
-                    at += 4;
-                }
+                case 'u' -> out.append(unicode());
                 default -> throw error("unknown escape \\" + e);
             }
         }
     }
 
+    /** 反斜杠 u 之后的四位十六进制数。不用 Integer.parseInt：它接受正负号与全角数字。 */
+    private char unicode() {
+        if (at + 4 > text.length()) throw error("short \\u escape");
+        int code = 0;
+        for (int end = at + 4; at < end; at++) {
+            char c = text.charAt(at);
+            int digit = c < 128 ? Character.digit(c, 16) : -1;
+            if (digit < 0) throw error("bad \\u escape");
+            code = code * 16 + digit;
+        }
+        return (char) code;
+    }
+
     private Object number() {
         int start = at;
-        if (peekChar('-')) at++;
-        if (peekChar('0')) at++;
+        if (next('-')) at++;
+        if (next('0')) at++;
         else digits();
         boolean whole = true;
-        if (peekChar('.')) {
+        if (next('.')) {
             at++;
             digits();
             whole = false;
         }
-        if (peekChar('e') || peekChar('E')) {
+        if (next('e') || next('E')) {
             at++;
-            if (peekChar('+') || peekChar('-')) at++;
+            if (next('+') || next('-')) at++;
             digits();
             whole = false;
         }
@@ -225,7 +230,7 @@ public final class Json {
     /** 至少一位数字。 */
     private void digits() {
         int start = at;
-        while (at < text.length() && Character.isDigit(text.charAt(at)) && text.charAt(at) < 128) at++;
+        while (at < text.length() && text.charAt(at) >= '0' && text.charAt(at) <= '9') at++;
         if (at == start) throw error("expected a digit");
     }
 
@@ -244,7 +249,7 @@ public final class Json {
     }
 
     /** 下一个字符是 c 时跳过它。 */
-    private boolean peek(char c) {
+    private boolean skip(char c) {
         if (at < text.length() && text.charAt(at) == c) {
             at++;
             return true;
@@ -252,10 +257,11 @@ public final class Json {
         return false;
     }
 
-    private boolean peekChar(char c) { return at < text.length() && text.charAt(at) == c; }
+    /** 下一个字符是不是 c（不跳过）。 */
+    private boolean next(char c) { return at < text.length() && text.charAt(at) == c; }
 
     private void expect(char c) {
-        if (!peek(c)) throw error("expected '" + c + "'");
+        if (!skip(c)) throw error("expected '" + c + "'");
     }
 
     private IllegalArgumentException error(String message) {

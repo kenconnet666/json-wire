@@ -4,7 +4,7 @@ import java.util.Locale;
 
 /**
  * 线上要还原的值的种类：JSON 不能原样承载的值写成文字，{@code $types} 记下它们在哪里、是哪一种。
- * 与 TypeScript 的 {@code @zerodep-dev/wire}、vue-tsx-pro 的请求层是同一套词（docs/decisions/0015）。
+ * 与 TypeScript 的 {@code @zerodep-dev/json-wire} 是同一套词（docs/format.md）。
  *
  * <table>
  *   <caption>种类、Java 类型与文字</caption>

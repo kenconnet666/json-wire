@@ -51,7 +51,7 @@ class JsonTest {
 
     @Test
     void rejectsBadInputWithPosition() {
-        for (String bad : new String[] {"", "{", "[1,]", "{\"a\" 1}", "{a:1}", "01", "1.", "-", "\"\\x\"", "\"a", "tru", "[1] 2", "\"\u0001\""}) {
+        for (String bad : new String[] {"", "{", "[1,]", "{\"a\" 1}", "{a:1}", "01", "1.", "-", "\"\\x\"", "\"a", "tru", "[1] 2", "\"\u0001\"", "\"\\u+041\"", "\"\\u004\""}) {
             IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Json.read(bad), bad);
             assertTrue(e.getMessage().startsWith("Json.read: "), e.getMessage());
             assertTrue(e.getMessage().contains("at position"), e.getMessage());
