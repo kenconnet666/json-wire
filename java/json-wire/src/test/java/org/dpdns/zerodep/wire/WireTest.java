@@ -164,10 +164,59 @@ class WireTest {
         assertEquals(new Money(new BigDecimal("9.90")), Wire.parse(Money.class, "9.90"));
     }
 
+    /** 年月：按普通文字写，不进 $types。 */
+    record Month(int year, int month) {
+        @Override public String toString() { return String.format("%d-%02d", year, month); }
+
+        static Month of(String text) {
+            if (!text.matches("\\d{4}-\\d{2}")) throw new IllegalArgumentException("expected yyyy-MM");
+            return new Month(Integer.parseInt(text.substring(0, 4)), Integer.parseInt(text.substring(5)));
+        }
+    }
+
+    /** 某个接口的实现都按接口注册的写法写。 */
+    interface Code { String value(); }
+
+    record Sku(String value) implements Code { }
+
+    @Test
+    void 种类为null时写成普通文字_子类按父类型的写法写_parse要的是注册的类型本身() {
+        Wire.register(new WireCodec<>(Month.class, null, Month::toString, Month::of));
+        Wire.register(new WireCodec<>(Code.class, WireType.BIGINT, Code::value, t -> new Sku(t)));
+        assertEquals(List.of(Map.of("m", "2024-01"), Map.of("m", "2024-02")), Wire.encode(List.of(Map.of("m", new Month(2024, 1)), Map.of("m", "2024-02"))));
+        assertEquals(null, Wire.typeOf(new Month(2024, 1)));
+        assertEquals(new Month(2024, 3), Wire.parse(Month.class, "2024-03"));
+        var error = assertThrows(IllegalArgumentException.class, () -> Wire.parse(Month.class, "2024/03"));
+        assertTrue(error.getMessage().contains("\"2024/03\" is not a Month"), error.getMessage());
+
+        assertEquals(Map.of("sku", "42", "$types", Map.of("sku", "bigint")), Wire.encode(Map.of("sku", new Sku("42"))));
+        assertEquals(WireType.BIGINT, Wire.typeOf(new Sku("42")));
+        assertThrows(IllegalArgumentException.class, () -> Wire.parse(Sku.class, "42"));
+    }
+
+    @Test
+    void 注册时校验参数() {
+        assertThrows(NullPointerException.class, () -> Wire.register(null));
+        assertThrows(NullPointerException.class, () -> new WireCodec<>(Month.class, null, Month::toString, null));
+    }
+
     @Test
     void 还原成什么可以换() {
         WireReader offsets = (kind, text) -> kind == WireType.TIMESTAMPTZ ? OffsetDateTime.parse(text) : Wire.read(kind, text);
         Object at = ((Map<?, ?>) Wire.decode(Map.of("at", "2024-01-31T05:45:00Z", "$types", Map.of("at", "timestamptz")), offsets)).get("at");
         assertEquals(OffsetDateTime.of(2024, 1, 31, 5, 45, 0, 0, ZoneOffset.UTC), at);
+    }
+
+    @Test
+    void reader可以把decimal读回注册的值类型_往返一致_读不出时指出路径() throws Exception {
+        Wire.register(new WireCodec<>(Money.class, WireType.DECIMAL, m -> m.amount().toPlainString(), t -> new Money(new BigDecimal(t))));
+        WireReader money = (kind, text) -> kind == WireType.DECIMAL ? Wire.parse(Money.class, text) : Wire.read(kind, text);
+        String text = JSON.writeValueAsString(Wire.encode(Map.of("lines", List.of(Map.of("price", new Money(new BigDecimal("2.75")))))));
+        Map<?, ?> line = (Map<?, ?>) ((List<?>) ((Map<?, ?>) Wire.decode(Json.read(text), money)).get("lines")).get(0);
+        assertEquals(new Money(new BigDecimal("2.75")), line.get("price"));
+
+        WireReader refuse = (kind, text2) -> { throw new IllegalArgumentException("nope"); };
+        var error = assertThrows(IllegalArgumentException.class, () -> Wire.decode(Map.of("a", Map.of("b", "1"), "$types", Map.of("a.b", "bigint")), refuse));
+        assertTrue(error.getMessage().contains("Wire.decode: a.b: nope"), error.getMessage());
     }
 }

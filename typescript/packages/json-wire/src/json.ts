@@ -1,3 +1,4 @@
+import { codecOf } from "./codec.js";
 import { isWireType, parseWire, specialText, wireTypeOf, type WireOptions, type WireType } from "./scalar.js";
 
 /** JSON 能承载的值。 */
@@ -8,6 +9,19 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
  * 属性名里的 `~` 与 `.` 写成 `~0`、`~1`（同 JSON Pointer）。
  */
 export type WireTypes = Record<string, WireType>;
+
+/**
+ * `$types` 标出的文字还原成什么，与 Java 的 `WireReader` 对等。默认是 {@link parseWire}；要别的类型时包一层，只换自己关心的种类：
+ *
+ *   const reader: WireReader = (kind, text) => (kind === "decimal" ? Number(text) : parseWire(kind, text));
+ */
+export type WireReader = (kind: WireType, text: string) => unknown;
+
+/** {@link fromWire} 的选项。 */
+export interface FromWireOptions extends WireOptions {
+  /** 还原的方式；给了它时 `timeZone` 只在它自己调用 `parseWire(kind, text, { timeZone })` 时起作用。 */
+  readonly reader?: WireReader;
+}
 
 /** 根对象上的类型表。 */
 export const TYPES = "$types";
@@ -22,7 +36,8 @@ export const VALUE = "$value";
  *   toWire({ id: 9007199254740993n, amount: new Decimal("12.50"), rows: [{ on: new CalendarDate(2024, 1, 31) }] })
  *   // { id: "9007199254740993", amount: "12.5", rows: [{ on: "2024-01-31" }], $types: { id: "bigint", amount: "decimal", "rows.on": "date" } }
  *
- * 对象取自身可枚举的属性（值为 undefined 与函数的跳过），有 `toJSON` 的对象先调用它，Map 写成对象、Set 写成数组。
+ * 注册的值类型按注册的写法写（`registerWireCodec`）。对象取自身可枚举的属性（值为 undefined 与函数的跳过），
+ * 有 `toJSON` 的对象先调用它，Map 写成对象、Set 写成数组。
  * 同一路径上的值必须是同一种：一个路径上既有 Decimal 又有文字时报错，因为对方无从还原。循环引用报错。
  */
 export function toWire(value: unknown): Json {
@@ -43,9 +58,9 @@ export function toWire(value: unknown): Json {
 /**
  * 读线上的 JSON：按根上的 `$types` 把文字还原成 bigint、Decimal、`CalendarDate` 等，去掉 `$types`
  * （`{ $value, $types }` 拆成里面的值）；没有 `$types` 时原样返回。就地改写传入的对象，通常它刚由 JSON.parse 得到。
- * 路径上的值是 null 或已经不是文字时跳过；文字读不出时报错并指出路径。
+ * 路径上的值是 null 或已经不是文字时跳过；文字读不出时报错并指出路径。还原成什么可以用 `reader` 换（{@link WireReader}）。
  */
-export function fromWire<T = unknown>(json: unknown, options: WireOptions = {}): T {
+export function fromWire<T = unknown>(json: unknown, options: FromWireOptions = {}): T {
   if (!isRecord(json) || !Object.hasOwn(json, TYPES)) return json as T;
   const types = json[TYPES];
   if (!isRecord(types)) throw new TypeError(`fromWire: ${TYPES} must be an object of path → type`);
@@ -53,10 +68,11 @@ export function fromWire<T = unknown>(json: unknown, options: WireOptions = {}):
     if (!isWireType(type)) throw new TypeError(`fromWire: unknown type ${String(type)}`);
   }
   delete json[TYPES];
+  const reader = options.reader ?? ((kind: WireType, text: string) => parseWire(kind, text, options));
   for (const [path, type] of Object.entries(types)) {
     const steps = path.split(".").map(unescape);
     try {
-      revive(json, steps[0]!, steps.slice(1), type as WireType, options);
+      revive(json, steps[0]!, steps.slice(1), type as WireType, reader);
     } catch (error) {
       throw new TypeError(`fromWire: ${path}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
@@ -80,6 +96,11 @@ function encode(value: unknown, path: string, found: Map<string, WireType | "tex
     case "function":
     case "symbol":
       return null;
+  }
+  const codec = codecOf(value);
+  if (codec) {
+    note(found, path, codec.kind ?? "text");
+    return codec.write(value);
   }
   const type = wireTypeOf(value);
   if (type !== undefined) {
@@ -114,17 +135,17 @@ function note(found: Map<string, WireType | "text">, path: string, type: WireTyp
 }
 
 /** 沿路径往下，把末端的文字换成值；数组不占一段，逐个元素往下。 */
-function revive(holder: Record<string | number, unknown>, key: string | number, rest: readonly string[], type: WireType, options: WireOptions): void {
+function revive(holder: Record<string | number, unknown>, key: string | number, rest: readonly string[], type: WireType, reader: WireReader): void {
   const value = holder[key];
   if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) revive(value as unknown as Record<number, unknown>, i, rest, type, options);
+    for (let i = 0; i < value.length; i++) revive(value as unknown as Record<number, unknown>, i, rest, type, reader);
     return;
   }
   if (rest.length === 0) {
-    if (typeof value === "string") holder[key] = parseWire(type, value, options);
+    if (typeof value === "string") holder[key] = reader(type, value);
     return;
   }
-  if (isRecord(value)) revive(value, rest[0]!, rest.slice(1), type, options);
+  if (isRecord(value)) revive(value, rest[0]!, rest.slice(1), type, reader);
 }
 
 /** 属性名写进路径：`~` → `~0`，`.` → `~1`。 */

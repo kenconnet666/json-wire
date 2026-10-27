@@ -6,7 +6,8 @@
  *   const body = JSON.stringify(toWire({ amount: new Decimal("12.50"), on: new CalendarDate(2024, 1, 31) }));
  *   const value = fromWire<Order>(JSON.parse(body));   // amount 又是 Decimal，on 又是 CalendarDate
  */
-export { fromWire, toWire, TYPES, VALUE, type Json, type WireTypes } from "./json.js";
+export { registerWireCodec, type WireClass, type WireCodec } from "./codec.js";
+export { fromWire, toWire, TYPES, VALUE, type FromWireOptions, type Json, type WireReader, type WireTypes } from "./json.js";
 export {
   decodeBase64,
   encodeBase64,

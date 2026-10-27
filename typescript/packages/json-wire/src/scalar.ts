@@ -1,5 +1,6 @@
 import { CalendarDate, CalendarDateTime, getLocalTimeZone, parseAbsolute, Time, ZonedDateTime } from "@internationalized/date";
 import { Decimal } from "decimal.js";
+import { codecFor, codecOf, type WireClass } from "./codec.js";
 
 /**
  * 线上要还原的值的种类：JSON 不能原样承载的值写成文字，`$types` 记下它们在哪里、是哪一种。
@@ -43,8 +44,10 @@ const TIME = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$/;
 const TIMESTAMP = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)$/;
 const TIMESTAMPTZ = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/i;
 
-/** 值要还原成哪一种；JSON 能原样承载的值（文字、布尔、有限的数字、null）为 undefined。 */
+/** 值要还原成哪一种；JSON 能原样承载的值（文字、布尔、有限的数字、null）与注册成普通文字的值为 undefined。 */
 export function wireTypeOf(value: unknown): WireType | undefined {
+  const codec = codecOf(value);
+  if (codec) return codec.kind;
   switch (typeof value) {
     case "bigint":
       return "bigint";
@@ -79,6 +82,8 @@ export function wireText(value: unknown): string {
     case "number":
       return Object.is(value, -0) ? "0" : String(value);
   }
+  const codec = codecOf(value);
+  if (codec) return codec.write(value);
   const type = wireTypeOf(value);
   if (type === undefined) throw new TypeError(`wireText: ${describe(value)} is not a single value`);
   return specialText(type, value);
@@ -111,8 +116,13 @@ function utcText(epochMillis: number): string {
 /**
  * 按种类读线上的文字，格式与 {@link wireText} 写出的一致：整数要在安全范围内，日期要是真实存在的日历日期，
  * 时间到毫秒（更细的部分舍去），timestamptz 要带 `Z` 或时差。读不出时报错，消息里带上原文。
+ * 也是 `fromWire` 默认的还原方式。
  */
-export function parseWire(kind: WireKind, text: string, options: WireOptions = {}): unknown {
+export function parseWire(kind: WireKind, text: string, options?: WireOptions): unknown;
+/** 按注册的值类型读（`registerWireCodec`），同 Java 的 `Wire.parse(Money.class, text)`。 */
+export function parseWire<T>(type: WireClass<T>, text: string): T;
+export function parseWire(kind: WireKind | WireClass<unknown>, text: string, options: WireOptions = {}): unknown {
+  if (typeof kind === "function") return parseRegistered(kind, text);
   switch (kind) {
     case "text":
       return text;
@@ -149,6 +159,17 @@ export function parseWire(kind: WireKind, text: string, options: WireOptions = {
       return parseAbsolute(text.toUpperCase(), options.timeZone ?? getLocalTimeZone());
     case "bytes":
       return decodeBase64(text);
+  }
+}
+
+/** 用 type 注册的写法读文字；读不出时报错，消息里带上原文。 */
+function parseRegistered<T>(type: WireClass<T>, text: string): T {
+  const codec = codecFor(type);
+  if (!codec) throw new TypeError(`parseWire: ${type.name} is not registered; registerWireCodec it first`);
+  try {
+    return codec.read(text);
+  } catch (error) {
+    throw new TypeError(`${JSON.stringify(text)} is not a ${type.name}`, { cause: error });
   }
 }
 
