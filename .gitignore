@@ -1,0 +1,21 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+node_modules/
+typescript/**/dist/
+*.tsbuildinfo
+
+### IDE ###
+/.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings
+.factorypath
+
+### OS ###
+.DS_Store
+
+.claude/settings.local.json

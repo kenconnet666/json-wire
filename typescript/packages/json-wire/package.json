@@ -1,0 +1,52 @@
+{
+  "name": "@zerodep-dev/json-wire",
+  "version": "0.1.0-dev",
+  "type": "module",
+  "description": "Typed JSON for the wire: bigint, Decimal, calendar dates and bytes travel as text and come back as values, guided by a $types table",
+  "license": "Apache-2.0",
+  "author": "lionheart (https://github.com/kenconnet666)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kenconnet666/json-wire.git",
+    "directory": "typescript/packages/json-wire"
+  },
+  "homepage": "https://github.com/kenconnet666/json-wire#readme",
+  "bugs": {
+    "url": "https://github.com/kenconnet666/json-wire/issues"
+  },
+  "keywords": [
+    "json",
+    "typed-json",
+    "wire",
+    "serialization",
+    "decimal",
+    "bigint",
+    "date",
+    "api"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@internationalized/date": "3.12.4",
+    "decimal.js": "10.6.0"
+  },
+  "peerDependencies": {
+    "@internationalized/date": "^3.12.4",
+    "decimal.js": "^10.6.0"
+  }
+}

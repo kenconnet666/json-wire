@@ -1,0 +1,15 @@
+{
+  "name": "json-wire-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Unit tests of @zerodep-dev/json-wire against the shared sample",
+  "dependencies": {
+    "@internationalized/date": "3.12.4",
+    "@zerodep-dev/json-wire": "workspace:*",
+    "decimal.js": "10.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2"
+  }
+}
