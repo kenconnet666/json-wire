@@ -44,25 +44,12 @@ TypeScript 的日期类来自 `@internationalized/date`。还原时 Java 默认�
 | 编码 | `Wire.encode(value)` → Map、List、String、Number、Boolean 组成的树，任何 JSON 库都能原样写出 | `toWire(value)` → JSON 值 |
 | 还原 | `Wire.decode(tree)`、`Wire.decode(tree, reader)`：不改传入的树，返回不可修改的新树 | `fromWire(json, { timeZone, reader })`：就地改写，通常它刚由 `JSON.parse` 得到 |
 | typed JSON 文字 | `Wire.toJson(value)`、`Wire.fromJson(text)`（null 读成 null） | `stringifyWire(value)`、`parseWireJson(text, options)`（null、undefined 读成 null） |
-| 根是对象的 typed JSON 文字 | `Wire.fromJsonObject(text)` → `Map<String, Object>`，null 读成空 Map，根不是对象时报错 | `parseWireJsonObject(text, options)`，null、undefined 读成 `{}`，根不是对象时报错 |
 | 单个值的文字 | `Wire.text(value)`、`Wire.parse(Class, text)`、`Wire.read(kind, text)` | `wireText(value)`、`parseWire(kind 或类, text)` |
-| 转成要的类型 | `Wire.convert(value, Class)`、`Wire.convertList(value, Class)` | `parseWire(kind, wireText(value))`（见下文） |
-| 按点路径取值 | `Json.at(tree, "rows.0.price")`，取不到是 null | `jsonAt(tree, "rows.0.price")`，取不到是 undefined |
 | 值的种类 | `Wire.typeOf(value)` | `wireTypeOf(value)` |
 | 接入方的值类型 | `Wire.register(new WireCodec<>(…))` | `registerWireCodec({ … })` |
-| JSON 文字 | `Json.read(text)`、`Json.write(tree)`：零依赖的读写，数字不经 double；`Json.readObject(text)` 要求根是对象（报错带位置） | 用 `JSON.parse`、`JSON.stringify` |
+| JSON 文字 | `Json.read(text)`、`Json.write(tree)`：零依赖的读写，数字不经 double | 用 `JSON.parse`、`JSON.stringify` |
 
 Java 一侧绑定到有类型的对象时不需要 `decode`：Spring 的 Jackson 本来就把 `"12.50"`、ISO 日期读成 BigDecimal、LocalDate，Spring Boot 默认忽略不认识的 `$types`。没有类型可依的树（表单的值、`Map<String, Object>`）才用 `Wire.decode`。
-
-## 转成要的类型
-
-读请求体、表单时，decode 出来的值未必是代码要的类型：没标类型的数是 Integer、Double，地址栏里来的是文字。Java 用 `Wire.convert(value, Long.class)`：已是该类型的原样返回，其余的先写成线上的文字（`Wire.text`）再按 `Wire.parse` 读，规则与 parse 一样严格：
-
-- 整数类型不接受有小数部分的数（`12.5` → `"12.5" is not a Long`），也不接受超出范围的数；`3.0`、`BigDecimal("3.00")` 可以。
-- 数与文字、带时差的时刻之间（Instant ↔ OffsetDateTime）可以互转；注册的值类型两个方向都认。
-- Map、List 这类不是单个值的报错；`Wire.convertList` 逐项转，null 是空列表，单个值不当列表，报错时带上第几项。
-
-TypeScript 没有类来指明目标类型，种类就是目标：`parseWire("integer", wireText(value))` 做的是同一件事，所以没有另加函数。
 
 ## 地址栏里的值
 

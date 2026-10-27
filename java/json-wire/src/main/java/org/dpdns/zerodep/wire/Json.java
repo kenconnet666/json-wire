@@ -38,16 +38,6 @@ public final class Json {
         return value;
     }
 
-    /** 读一段根是对象的 JSON 文字（JSON 列、配置）；根不是对象时报错并带上位置，text 为 null 时是空的 Map。读出来的 Map 不可修改。 */
-    @SuppressWarnings("unchecked")
-    public static Map<String, Object> readObject(String text) {
-        if (text == null) return Map.of();
-        Json reader = new Json(text);
-        reader.space();
-        if (!reader.next('{')) throw reader.error("expected a JSON object");
-        return (Map<String, Object>) read(text);
-    }
-
     /**
      * 写成紧凑的 JSON 文字：Map（键取 toString）、Collection 与数组、String、Boolean、null，数字原样写（BigDecimal 不用科学计数法）。
      * 别的类型、NaN 与无穷大报 IllegalArgumentException；要写 bigint、日期这些先经 {@link Wire#encode} 变成文字。
@@ -56,29 +46,6 @@ public final class Json {
         StringBuilder out = new StringBuilder();
         write(value, out, 0);
         return out.toString();
-    }
-
-    /**
-     * 按点路径取树里的值：{@code "buyer.name"} 沿嵌套的 Map 往下取，列表上的数字段按下标取（{@code "rows.0.price"}）。
-     * 路径上不是 Map、没有这个键、下标越界时为 null；空路径是树本身。属性名本身带点时取不到，这时直接用 Map。
-     */
-    public static Object at(Object tree, String path) {
-        if (path == null) throw new IllegalArgumentException("Json.at: path is null");
-        if (path.isEmpty()) return tree;
-        Object value = tree;
-        for (String step : path.split("\\.", -1)) {
-            if (value instanceof Map<?, ?> map) value = map.get(step);
-            else if (value instanceof List<?> list) value = item(list, step);
-            else return null;
-        }
-        return value;
-    }
-
-    /** 列表的第 step 项；step 不是下标或越界时为 null。 */
-    private static Object item(List<?> list, String step) {
-        if (step.isEmpty() || step.length() > 9 || !step.chars().allMatch(c -> c >= '0' && c <= '9')) return null;
-        int index = Integer.parseInt(step);
-        return index < list.size() ? list.get(index) : null;
     }
 
     private static void write(Object value, StringBuilder out, int depth) {

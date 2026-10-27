@@ -9,9 +9,7 @@
 export { registerWireCodec, type WireClass, type WireCodec } from "./codec.js";
 export {
   fromWire,
-  jsonAt,
   parseWireJson,
-  parseWireJsonObject,
   stringifyWire,
   toWire,
   TYPES,

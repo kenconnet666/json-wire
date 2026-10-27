@@ -86,28 +86,4 @@ class JsonTest {
             assertTrue(e.getMessage().startsWith("Json.write: "), e.getMessage());
         }
     }
-
-    @Test
-    void at按点路径取值_列表按下标_取不到时是null() {
-        Object tree = Json.read("{\"buyer\":{\"name\":\"甲\"},\"rows\":[{\"price\":1.5},{\"price\":2}],\"n\":null}");
-        assertEquals("甲", Json.at(tree, "buyer.name"));
-        assertEquals(new BigDecimal("1.5"), Json.at(tree, "rows.0.price"));
-        assertEquals(2L, Json.at(tree, "rows.1.price"));
-        assertEquals(tree, Json.at(tree, ""));
-        for (String missing : new String[] {"buyer.age", "buyer.name.first", "rows.2.price", "rows.x", "rows.-1", "rows.99999999999", "n.x", "buyer..name"}) {
-            assertNull(Json.at(tree, missing), missing);
-        }
-        assertNull(Json.at(null, "a"));
-        assertThrows(IllegalArgumentException.class, () -> Json.at(tree, null));
-    }
-
-    @Test
-    void readObject要求根是对象_null是空Map() {
-        assertEquals(Map.of("a", 1L), Json.readObject(" {\"a\":1} "));
-        assertEquals(Map.of(), Json.readObject(null));
-        assertThrows(UnsupportedOperationException.class, () -> Json.readObject(null).put("a", 1));
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Json.readObject("  [1]"));
-        assertEquals("Json.read: expected a JSON object at position 2", e.getMessage());
-        assertThrows(IllegalArgumentException.class, () -> Json.readObject("{\"a\":}"));
-    }
 }

@@ -14,7 +14,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -138,13 +137,6 @@ public final class Wire {
      */
     public static String text(Object value) {
         if (value == null) return "";
-        String text = singleText(value);
-        if (text == null) throw new IllegalArgumentException("Wire.text: " + value.getClass().getSimpleName() + " is not a single value");
-        return text;
-    }
-
-    /** 单个值写成的文字；value 不是单个值（集合、对象）时为 null。 */
-    private static String singleText(Object value) {
         WireCodec<?> codec = codecOf(value);
         if (codec != null) return codec.write(value);
         if (value instanceof CharSequence || value instanceof Character || value instanceof Boolean || value instanceof UUID) return value.toString();
@@ -155,7 +147,8 @@ public final class Wire {
         }
         if (value instanceof Integer || value instanceof Short || value instanceof Byte) return value.toString();
         WireType type = typeOf(value);
-        return type == null ? null : special(type, value);
+        if (type == null) throw new IllegalArgumentException("Wire.text: " + value.getClass().getSimpleName() + " is not a single value");
+        return special(type, value);
     }
 
     /** 要还原的值写成的文字；type 是 {@link #typeOf} 的结果。 */
@@ -223,41 +216,6 @@ public final class Wire {
     }
 
     /**
-     * 把一个值转成 type（读请求体、表单里 decode 出来的值用）：null 是 null，已是 type 的原样返回；其余的值先写成线上的文字
-     * （{@link #text}）再按 {@link #parse} 读，所以规则与 parse 一样严格：整数类型不接受有小数部分的数、超出范围的数，
-     * 数与文字、带时差的时刻之间可以互转，注册的值类型也认。转不了时报 IllegalArgumentException，消息形如 {@code "12.5" is not a Long}。
-     */
-    @SuppressWarnings("unchecked")
-    public static <T> T convert(Object value, Class<T> type) {
-        if (type == null) throw new IllegalArgumentException("Wire.convert: type is null");
-        if (value == null) return null;
-        if (box(type).isInstance(value)) return (T) value;
-        if (readerFor(box(type)) == null) throw new IllegalArgumentException("Wire.convert: cannot convert to " + type.getSimpleName());
-        // 12.50 的小数部分是零，转成整数类型时不算小数；转成文字时保留原样
-        String text = value instanceof BigDecimal d && type != String.class ? d.stripTrailingZeros().toPlainString() : singleText(value);
-        if (text == null) throw new IllegalArgumentException(value.getClass().getSimpleName() + " is not a " + type.getSimpleName());
-        return parse(type, text);
-    }
-
-    /** 把列表的每一项转成 type（见 {@link #convert}）：null 是空列表，单个值不当成列表；报错时带上第几项。返回的列表不可修改。 */
-    public static <T> List<T> convertList(Object value, Class<T> type) {
-        if (type == null) throw new IllegalArgumentException("Wire.convertList: type is null");
-        if (value == null) return List.of();
-        if (!(value instanceof Collection<?> items)) {
-            throw new IllegalArgumentException(value.getClass().getSimpleName() + " is not a list of " + type.getSimpleName());
-        }
-        List<T> out = new ArrayList<>(items.size());
-        for (Object item : items) {
-            try {
-                out.add(convert(item, type));
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("item " + out.size() + ": " + e.getMessage(), e);
-            }
-        }
-        return Collections.unmodifiableList(out);
-    }
-
-    /**
      * 读线上的 JSON 树（{@link Json#read} 或任何 JSON 库读出的 Map、List），与 TypeScript 的 {@code fromWire} 得到同样的值：
      * <ul>
      *   <li>根上 {@code $types} 标出的文字还原成 Long、BigDecimal、LocalDate 等（见 {@link #read}），去掉 {@code $types}，
@@ -285,17 +243,6 @@ public final class Wire {
 
     /** 读 typed JSON 文字：{@code Wire.decode(Json.read(text))}，text 为 null 时是 null。与 TypeScript 的 {@code parseWireJson} 对等。 */
     public static Object fromJson(String text) { return text == null ? null : decode(Json.read(text)); }
-
-    /**
-     * 读根是对象的 typed JSON 文字（{@link Json#readObject} 再 {@link #decode}）；text 为 null 时是空的 Map。
-     * 根不是对象时报错并带上位置；写的时候根是列表或单个值（包成 {@code $value}）的也报错。与 TypeScript 的 {@code parseWireJsonObject} 对等。
-     */
-    @SuppressWarnings("unchecked")
-    public static Map<String, Object> fromJsonObject(String text) {
-        Object value = decode(Json.readObject(text));
-        if (value instanceof Map<?, ?>) return (Map<String, Object>) value;
-        throw new IllegalArgumentException("Wire.fromJsonObject: the JSON object wraps a " + VALUE + " that is not an object");
-    }
 
     /** 沿树往下，路径在 types 里的文字换成值；数组不占一段。 */
     private static Object revive(Object value, String path, Map<String, WireType> types, WireReader reader) {

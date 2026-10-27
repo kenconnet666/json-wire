@@ -27,22 +27,20 @@
 Object order(@PathVariable long id) { return Wire.encode(service.find(id)); }   // Map、List 组成的树，Jackson、Gson 都能原样写出
 
 Object order = Wire.decode(Json.read(text));        // 按 $types 还原成 Long、BigDecimal、LocalDate……
-String column = Wire.toJson(variables);             // 存进 JSON 列；读回用 Wire.fromJsonObject(column) → Map<String, Object>
+String column = Wire.toJson(variables);             // 存进 JSON 列；读回用 Wire.fromJson(column)
 LocalDate on = Wire.parse(LocalDate.class, "2024-01-31");
-Long id = Wire.convert(Json.at(body, "order.id"), Long.class);   // 12.5 报 "12.5" is not a Long
 String q = Wire.text(new BigDecimal("1E-7"));       // "0.0000001"
 ```
 
-`Json.read` / `Json.write` 是零依赖的 JSON 读写（数字不经 double），给不经 Web 框架的 JSON 用；`Json.readObject` 要求根是对象，`Json.at` 按点路径取值。
+`Json.read` / `Json.write` 是零依赖的 JSON 读写（数字不经 double），给不经 Web 框架的 JSON 用。
 
 ## TypeScript
 
 ```ts
-import { jsonAt, parseWire, parseWireJson, stringifyWire, wireText } from "@zerodep-dev/json-wire";
+import { parseWire, parseWireJson, stringifyWire, wireText } from "@zerodep-dev/json-wire";
 
 const body = stringifyWire({ id: 9007199254740993n, amount: new Decimal("12.50"), on: new CalendarDate(2024, 1, 31) });
 const order = parseWireJson<Order>(body, { timeZone: "Asia/Shanghai" });   // 即 fromWire(JSON.parse(body), …)
-jsonAt(order, "amount");              // Decimal；嵌套时写 "lines.0.qty"
 wireText(new Decimal("1e-7"));        // "0.0000001"
 parseWire("date", "2024-01-31");      // CalendarDate
 ```
