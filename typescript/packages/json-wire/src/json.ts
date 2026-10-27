@@ -81,6 +81,34 @@ export function fromWire<T = unknown>(json: unknown, options: FromWireOptions = 
   return (keys.length === 1 && keys[0] === VALUE ? json[VALUE] : json) as T;
 }
 
+/** 写成 typed JSON 文字：`JSON.stringify(toWire(value))`。与 Java 的 `Wire.toJson` 对等。 */
+export function stringifyWire(value: unknown): string {
+  return JSON.stringify(toWire(value));
+}
+
+/**
+ * 读 typed JSON 文字：`fromWire(JSON.parse(text), options)`，text 为 null 或 undefined 时是 null。与 Java 的 `Wire.fromJson` 对等。
+ * 没标类型的数由 `JSON.parse` 读成 number；对方用 `toWire` / `Wire.encode` 写的大整数、小数都带着 `$types`，不受影响。
+ */
+export function parseWireJson<T = unknown>(text: string | null | undefined, options: FromWireOptions = {}): T | null {
+  return text === null || text === undefined ? null : fromWire<T>(JSON.parse(text), options);
+}
+
+/**
+ * 按点路径取树里的值：`"buyer.name"` 沿嵌套的对象往下取，数组上的数字段按下标取（`"rows.0.price"`）。
+ * 路径上不是对象、没有这个属性（只认自身的属性）、下标越界时为 undefined；空路径是树本身。与 Java 的 `Json.at` 对等，Java 那边取不到时是 null。
+ */
+export function jsonAt(tree: unknown, path: string): unknown {
+  if (path === "") return tree;
+  let value = tree;
+  for (const step of path.split(".")) {
+    if (Array.isArray(value)) value = /^\d+$/.test(step) ? value[Number(step)] : undefined;
+    else if (isRecord(value) && Object.hasOwn(value, step)) value = value[step];
+    else return undefined;
+  }
+  return value;
+}
+
 /** 写下 value，path 是它的路径，found 收集各路径上值的种类。 */
 function encode(value: unknown, path: string, found: Map<string, WireType | "text">, seen: Set<object>): Json {
   if (value === null || value === undefined) return null;

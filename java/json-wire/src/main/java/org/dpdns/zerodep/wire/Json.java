@@ -48,6 +48,29 @@ public final class Json {
         return out.toString();
     }
 
+    /**
+     * 按点路径取树里的值：{@code "buyer.name"} 沿嵌套的 Map 往下取，列表上的数字段按下标取（{@code "rows.0.price"}）。
+     * 路径上不是 Map、没有这个键、下标越界时为 null；空路径是树本身。属性名本身带点时取不到，这时直接用 Map。
+     */
+    public static Object at(Object tree, String path) {
+        if (path == null) throw new IllegalArgumentException("Json.at: path is null");
+        if (path.isEmpty()) return tree;
+        Object value = tree;
+        for (String step : path.split("\\.", -1)) {
+            if (value instanceof Map<?, ?> map) value = map.get(step);
+            else if (value instanceof List<?> list) value = item(list, step);
+            else return null;
+        }
+        return value;
+    }
+
+    /** 列表的第 step 项；step 不是下标或越界时为 null。 */
+    private static Object item(List<?> list, String step) {
+        if (step.isEmpty() || step.length() > 9 || !step.chars().allMatch(c -> c >= '0' && c <= '9')) return null;
+        int index = Integer.parseInt(step);
+        return index < list.size() ? list.get(index) : null;
+    }
+
     private static void write(Object value, StringBuilder out, int depth) {
         if (depth > MAX_DEPTH) throw new IllegalArgumentException("Json.write: nested more than " + MAX_DEPTH + " levels");
         if (value == null) out.append("null");

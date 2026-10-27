@@ -219,4 +219,70 @@ class WireTest {
         var error = assertThrows(IllegalArgumentException.class, () -> Wire.decode(Map.of("a", Map.of("b", "1"), "$types", Map.of("a.b", "bigint")), refuse));
         assertTrue(error.getMessage().contains("Wire.decode: a.b: nope"), error.getMessage());
     }
+
+    @Test
+    void toJson与fromJson是typed_JSON文字的往返() throws Exception {
+        String text = Wire.toJson(order());
+        assertEquals(sample(), JSON.readTree(text));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> back = (Map<String, Object>) Wire.fromJson(text);
+        assertEquals(9007199254740993L, back.get("id"));
+        assertEquals(LocalDate.of(2024, 1, 31), back.get("on"));
+        assertEquals("{\"a\":1}", Wire.toJson(Map.of("a", 1)));
+        assertEquals(null, Wire.fromJson(null));
+        assertEquals(List.of(1L, 2L), Wire.fromJson(Wire.toJson(List.of(1L, 2L))));
+    }
+
+    enum Level { LOW, HIGH }
+
+    @Test
+    void convert按parse的规则把还原出的值转成要的类型() {
+        assertEquals(null, Wire.convert(null, Long.class));
+        BigDecimal same = new BigDecimal("12.50");
+        assertTrue(Wire.convert(same, BigDecimal.class) == same);
+        assertEquals(12L, Wire.convert(12, Long.class));
+        assertEquals(12L, Wire.convert(12, long.class));
+        assertEquals(3L, Wire.convert(3.0, Long.class));
+        assertEquals(3L, Wire.convert(new BigDecimal("3.00"), Long.class));
+        assertEquals(9007199254740993L, Wire.convert("9007199254740993", Long.class));
+        assertEquals(new BigDecimal("0.1"), Wire.convert(0.1, BigDecimal.class));
+        assertEquals(new BigDecimal("9007199254740993"), Wire.convert(9007199254740993L, BigDecimal.class));
+        assertEquals(12.5, Wire.convert(new BigDecimal("12.5"), Double.class));
+        assertEquals(BigInteger.TEN.pow(20), Wire.convert(new BigDecimal("1E+20"), BigInteger.class));
+        assertEquals("12.50", Wire.convert(new BigDecimal("12.50"), String.class));
+        assertEquals("2024-01-31", Wire.convert(LocalDate.of(2024, 1, 31), String.class));
+        assertEquals(LocalDate.of(2024, 1, 31), Wire.convert("2024-01-31", LocalDate.class));
+        assertEquals(OffsetDateTime.of(2024, 1, 31, 5, 45, 0, 0, ZoneOffset.UTC), Wire.convert(Instant.parse("2024-01-31T05:45:00Z"), OffsetDateTime.class));
+        assertEquals(Level.HIGH, Wire.convert("HIGH", Level.class));
+        assertEquals(true, Wire.convert("true", Boolean.class));
+
+        for (Object[] bad : new Object[][] {{12.5, Long.class, "\"12.5\" is not a Long"}, {new BigDecimal("12.50"), Long.class, "\"12.5\" is not a Long"},
+            {3_000_000_000L, Integer.class, "\"3000000000\" is not a Integer"}, {"x", BigDecimal.class, "\"x\" is not a BigDecimal"},
+            {Double.NaN, BigDecimal.class, "\"NaN\" is not a BigDecimal"}, {1, Boolean.class, "\"1\" is not a Boolean"},
+            {"MIDDLE", Level.class, "\"MIDDLE\" is not a Level"}, {Map.of(), Long.class, "is not a Long"},
+            {List.of(1), String.class, "is not a String"}, {"a", Order.class, "Wire.convert: cannot convert to Order"}}) {
+            var error = assertThrows(IllegalArgumentException.class, () -> Wire.convert(bad[0], (Class<?>) bad[1]), String.valueOf(bad[0]));
+            assertTrue(error.getMessage().contains((String) bad[2]), error.getMessage());
+        }
+    }
+
+    @Test
+    void convert认注册的值类型() {
+        Wire.register(new WireCodec<>(Money.class, WireType.DECIMAL, m -> m.amount().toPlainString(), t -> new Money(new BigDecimal(t))));
+        assertEquals(new Money(new BigDecimal("9.90")), Wire.convert("9.90", Money.class));
+        assertEquals(new Money(new BigDecimal("9.9")), Wire.convert(9.9, Money.class));
+        assertEquals(new BigDecimal("9.90"), Wire.convert(new Money(new BigDecimal("9.90")), BigDecimal.class));
+    }
+
+    @Test
+    void convertList逐项转_null是空列表_单个值不当列表() {
+        assertEquals(List.of(1L, 2L, 3L), Wire.convertList(List.of(1, "2", new BigDecimal("3")), Long.class));
+        assertEquals(List.of(), Wire.convertList(null, Long.class));
+        assertEquals(java.util.Arrays.asList(1L, null), Wire.convertList(java.util.Arrays.asList(1, null), Long.class));
+        var single = assertThrows(IllegalArgumentException.class, () -> Wire.convertList(1L, Long.class));
+        assertTrue(single.getMessage().contains("Long is not a list of Long"), single.getMessage());
+        var item = assertThrows(IllegalArgumentException.class, () -> Wire.convertList(List.of(1, 2.5), Long.class));
+        assertTrue(item.getMessage().contains("item 1: \"2.5\" is not a Long"), item.getMessage());
+        assertThrows(UnsupportedOperationException.class, () -> Wire.convertList(List.of(1), Long.class).add(2L));
+    }
 }

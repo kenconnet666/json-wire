@@ -7,7 +7,19 @@
  *   const value = fromWire<Order>(JSON.parse(body));   // amount 又是 Decimal，on 又是 CalendarDate
  */
 export { registerWireCodec, type WireClass, type WireCodec } from "./codec.js";
-export { fromWire, toWire, TYPES, VALUE, type FromWireOptions, type Json, type WireReader, type WireTypes } from "./json.js";
+export {
+  fromWire,
+  jsonAt,
+  parseWireJson,
+  stringifyWire,
+  toWire,
+  TYPES,
+  VALUE,
+  type FromWireOptions,
+  type Json,
+  type WireReader,
+  type WireTypes,
+} from "./json.js";
 export {
   decodeBase64,
   encodeBase64,

@@ -14,4 +14,6 @@ const body = JSON.stringify(toWire({ id: 9007199254740993n, amount: new Decimal(
 const order = fromWire<Order>(JSON.parse(body));   // id 又是 bigint，amount 又是 Decimal，on 又是 CalendarDate
 ```
 
+`stringifyWire` / `parseWireJson` 是上面两步的简写，`jsonAt(tree, "lines.0.qty")` 按点路径取值。
+
 格式、两边的 API 与扩展方式见仓库：<https://github.com/kenconnet666/json-wire>。
