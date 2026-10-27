@@ -38,6 +38,10 @@
     "src"
   ],
   "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b",
+    "prepack": "tsc -b"
+  },
   "publishConfig": {
     "access": "public"
   },
